@@ -42,7 +42,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
      Gc [2.7N/mm]
        Fracture toughness.
 
-     nstep [150]
+     nstep [2]
        Number of steps.
 
      du [0.0001mm]
@@ -94,10 +94,12 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   ns.l0     = l0
   ns.Gc     = Gc
   ns.du     = du
+  
+  ns.lmbda2 = 'dbasis_n  ?lmbdadofs_n'
 
   # formulation
   ns.strain_ij = '( u_i,j + u_j,i ) / 2'
-  ns.stress_ij = 'lmbda strain_kk δ_ij + 2 mu strain_ij'
+  ns.stress_ij = 'lmbda2 strain_kk δ_ij + 2 mu strain_ij'
   ns.psi       = 'stress_ij strain_ij / 2'
   ns.H         = function.max(ns.psi, ns.H0)
   ns.gamma     = '( d^2 + l0^2 d_,i d_,i ) / (2 l0)'
@@ -110,6 +112,9 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
 
   sqrd  = ctopo.integral('(d - 1)^2 d:x' @ ns, degree=degree*2)
   consd = solver.optimize('sold', sqrd, droptol=1e-12)
+ 
+  sqrl = topo.integral('(lmbda2 - lmbda)^2 d:x' @ ns, degree=degree*2)
+  lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
 
   # initialize the solution vectors
   solu = numpy.zeros(ns.ubasis.shape[0])
@@ -133,17 +138,17 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       resd  = ipoints.integral('( Gc / l0 ) ( d dbasis_n + l0^2 d_,i dbasis_n,i ) d:x' @ ns)
       resd += ipoints.integral('2 H ( d - 1 ) dbasis_n d:x' @ ns)
 
-      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0}, constrain=consd)
+      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs}, constrain=consd)
 
       ############################
       # Elasticity problem       #
       ############################
 
       resu = topo.integral('( 1 - d )^2 ubasis_ni,j stress_ij d:x' @ ns, degree=2*degree)
-      solu = solver.solve_linear('solu', resu, arguments={'sold':sold}, constrain=istep*consu)
+      solu = solver.solve_linear('solu', resu, arguments={'sold':sold, 'lmbdadofs':lmbdadofs}, constrain=istep*consu)
 
       # Update zero state and history field
-      solH0 = ipoints.eval(ns.H, arguments={'solu':solu, 'solH0':solH0})
+      solH0 = ipoints.eval(ns.H, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
 
       ############################
       # Output                   #
@@ -152,7 +157,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       clen = ipoints.integrate('gamma d:x' @ ns, arguments={'sold':sold})
 
       # append data containers
-      blen, bdisp, bforc = topo.boundary['top'].integrate(['d:x', 'u_i n_i d:x', '( 1 - d )^2 stress_ij n_i n_j d:x'] @ ns(solu=solu, sold=sold), degree=2*degree)
+      blen, bdisp, bforc = topo.boundary['top'].integrate(['d:x', 'u_i n_i d:x', '( 1 - d )^2 stress_ij n_i n_j d:x'] @ ns(solu=solu, sold=sold, lmbdadofs=lmbdadofs), degree=2*degree)
       bdisp /= blen
       data_disp.append(bdisp/unit('1.0mm'))
       data_force.append(bforc*unit('1.0mm'))
@@ -161,11 +166,11 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       # element-averaged history field
       transforms = ipoints.transforms[0]
       indicator  = function.kronecker(1., axis=0, length=len(transforms), pos=function.TransformsIndexWithTail(transforms, function.TRANS).index)
-      areas, integrals = ipoints.integrate([indicator, indicator * ns.H], arguments={'solu':solu, 'solH0':solH0})
+      areas, integrals = ipoints.integrate([indicator, indicator * ns.H], arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
       H = indicator.dot(integrals/areas)
 
       # evaluate fields
-      points, dvals, uvals, psivals = bezier.eval(['x_i', 'd', 'u_i', 'psi'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0})
+      points, dvals, uvals, psivals, lvals = bezier.eval(['x_i', 'd', 'u_i', 'psi', 'lmbda2'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
       Hvals = bezier.eval(H, arguments={'solu':solu, 'solH0':solH0})
 
       with export.mplfigure('solution.png') as fig:
@@ -197,5 +202,13 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
         ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
         ax.autoscale(enable=True, axis='both', tight=False)
         fig.colorbar(im)
+        
+      with export.mplfigure('lambda.png') as fig:
+        ax = fig.add_subplot(111)
+        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, lvals, shading='gouraud', cmap='jet', rasterized=True)
+        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
+        ax.autoscale(enable=True, axis='both', tight=False)
+        fig.colorbar(im)
+        im.set_clim(1e11,2e11)
 
 cli.run(main)
