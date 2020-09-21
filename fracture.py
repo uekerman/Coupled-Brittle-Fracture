@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 unit = types.unit(m=1, s=1, g=1e-3, N='kg*m/s2', Pa='N/m2')
 
-def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], lmbda:unit['Pa'], mu:unit['Pa'], Gc:unit['N/m'], nstep:int, du:unit['m']):
+def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], mu:unit['Pa'], Gc:unit['N/m'], nstep:int, du:unit['m']):
 
   '''
   Mechanical test case
@@ -35,9 +35,6 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
 
      ry0 [0.09mm]
        Half-size of the y-refinement zone.
-
-     lmbda [121153.8MPa]
-       First Lame parameter.
 
      mu [80769.2MPa]
        Second Lame parameter.
@@ -92,17 +89,16 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   ns.u_i    = 'ubasis_ni ?solu_n'
   ns.d      = 'dbasis_n  ?sold_n'
   ns.H0     = 'Hbasis_n ?solH0_n'
-  ns.lmbda  = lmbda
   ns.mu     = mu
   ns.l0     = l0
   ns.Gc     = Gc
   ns.du     = du
   
-  ns.lmbda2 = 'dbasis_n  ?lmbdadofs_n'
+  ns.lmbda = 'dbasis_n  ?lmbdadofs_n'
 
   # formulation
   ns.strain_ij = '( u_i,j + u_j,i ) / 2'
-  ns.stress_ij = 'lmbda2 strain_kk δ_ij + 2 mu strain_ij'
+  ns.stress_ij = 'lmbda strain_kk δ_ij + 2 mu strain_ij'
   ns.psi       = 'stress_ij strain_ij / 2'
   ns.H         = function.max(ns.psi, ns.H0)
   ns.gamma     = '( d^2 + l0^2 d_,i d_,i ) / (2 l0)'
@@ -155,8 +151,8 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
         readdata = interface.read_block_scalar_data(readdataID, dataIndices)
         coupledata = couplingsample.asfunction(readdata)
         
-        #sqrl = topo.integral('(lmbda2 - coupledata)^2 d:x' @ ns, degree=degree*2)
-        sqrl = couplingsample.integral((ns.lmbda2 - coupledata)**2)
+        #sqrl = topo.integral('(lmbda - coupledata)^2 d:x' @ ns, degree=degree*2)
+        sqrl = couplingsample.integral((ns.lmbda - coupledata)**2)
         
         lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
 
@@ -202,7 +198,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       H = indicator.dot(integrals/areas)
 
       # evaluate fields
-      points, dvals, uvals, psivals, lvals = bezier.eval(['x_i', 'd', 'u_i', 'psi', 'lmbda2'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
+      points, dvals, uvals, psivals, lvals = bezier.eval(['x_i', 'd', 'u_i', 'psi', 'lmbda'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
       Hvals = bezier.eval(H, arguments={'solu':solu, 'solH0':solH0})
 
       with export.mplfigure('solution.png') as fig:
