@@ -2,6 +2,9 @@
 
 from nutils import cli, types, mesh, function, solver, export, transform, topology
 import numpy, numpy.random, typing, treelog, matplotlib.collections
+import precice
+from mpi4py import MPI
+
 
 unit = types.unit(m=1, s=1, g=1e-3, N='kg*m/s2', Pa='N/m2')
 
@@ -42,7 +45,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
      Gc [2.7N/mm]
        Fracture toughness.
 
-     nstep [2]
+     nstep [1000]
        Number of steps.
 
      du [0.0001mm]
@@ -112,9 +115,6 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
 
   sqrd  = ctopo.integral('(d - 1)^2 d:x' @ ns, degree=degree*2)
   consd = solver.optimize('sold', sqrd, droptol=1e-12)
- 
-  sqrl = topo.integral('(lmbda2 - lmbda)^2 d:x' @ ns, degree=degree*2)
-  lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
 
   # initialize the solution vectors
   solu = numpy.zeros(ns.ubasis.shape[0])
@@ -126,10 +126,39 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   data_clen  = []
   data_disp  = []
   data_force = []
+  
+  # preCICE setup
+  configFileName = "precice-config.xml"
+  participantName = "BrittleFracture"
+  solverProcessIndex = 0
+  solverProcessSize = 1
+  interface = precice.Interface(participantName, configFileName, solverProcessIndex, solverProcessSize)
+
+  # define coupling mesh
+  meshName = "BrittleFracture-Mesh" 
+  meshID = interface.get_mesh_id(meshName)
+  couplingsample = topo.sample('gauss', degree=degree*2)
+  vertices = couplingsample.eval(ns.x)
+  dataIndices = interface.set_mesh_vertices(meshID, vertices)
+
+  # coupling data
+  readData = "Lmbda"
+  readdataID = interface.get_data_id(readData, meshID)
+  
+  precice_dt = interface.initialize()
 
   # Make loading steps
   with treelog.iter.fraction('step', range(nstep)) as counter:
     for istep in counter:
+    
+      if interface.is_read_data_available():  
+        readdata = interface.read_block_scalar_data(readdataID, dataIndices)
+        coupledata = couplingsample.asfunction(readdata)
+        
+        #sqrl = topo.integral('(lmbda2 - coupledata)^2 d:x' @ ns, degree=degree*2)
+        sqrl = couplingsample.integral((ns.lmbda2 - coupledata)**2)
+        
+        lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
 
       ############################
       # Phase field problem      #
@@ -149,6 +178,9 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
 
       # Update zero state and history field
       solH0 = ipoints.eval(ns.H, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
+      
+      # do the coupling
+      precice_dt = interface.advance(precice_dt)
 
       ############################
       # Output                   #
@@ -210,5 +242,10 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
         ax.autoscale(enable=True, axis='both', tight=False)
         fig.colorbar(im)
         im.set_clim(1e11,2e11)
+        
+      if not interface.is_coupling_ongoing():
+        break
+        
+  interface.finalize()
 
 cli.run(main)
