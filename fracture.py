@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 unit = types.unit(m=1, s=1, g=1e-3, N='kg*m/s2', Pa='N/m2')
 
-def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], mu:unit['Pa'], Gc:unit['N/m'], nstep:int, du:unit['m']):
+def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], mu:unit['Pa'], nstep:int, du:unit['m']):
 
   '''
   Mechanical test case
@@ -39,13 +39,10 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
      mu [80769.2MPa]
        Second Lame parameter.
 
-     Gc [2.7N/mm]
-       Fracture toughness.
-
      nstep [1000]
        Number of steps.
 
-     du [0.0001mm]
+     du [0.0002mm]
        Increment in displacement.
   '''
 
@@ -70,7 +67,8 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   interfaces = topo.interfaces
   sbezier = interfaces.sample('uniform',1)
   vals = sbezier.eval(geom, separate=True)
-  mask = numpy.concatenate([(abs(vals[i,1])<0.5*h1 and vals[i,0]<0) for i in sbezier.index])
+  #mask = numpy.concatenate([(abs(vals[i,1])<0.5*h1 and vals[i,0]<0) for i in sbezier.index])
+  mask = numpy.concatenate([(abs(vals[i,1])<0.5*h1 and vals[i,0]<-L/2) for i in sbezier.index])
 
   ctopo = topology.Topology(interfaces.references[mask], transforms=interfaces.transforms[mask], opposites=interfaces.opposites[mask])
 
@@ -91,9 +89,9 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   ns.H0     = 'Hbasis_n ?solH0_n'
   ns.mu     = mu
   ns.l0     = l0
-  ns.Gc     = Gc
   ns.du     = du
   
+  ns.Gc    = 'dbasis_n  ?gcdofs_n'
   ns.lmbda = 'dbasis_n  ?lmbdadofs_n'
 
   # formulation
@@ -138,8 +136,8 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   dataIndices = interface.set_mesh_vertices(meshID, vertices)
 
   # coupling data
-  readData = "Lmbda"
-  readdataID = interface.get_data_id(readData, meshID)
+  lmbdaID = interface.get_data_id("Lmbda", meshID)
+  gcID = interface.get_data_id("Gc", meshID)
   
   precice_dt = interface.initialize()
 
@@ -148,13 +146,15 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
     for istep in counter:
     
       if interface.is_read_data_available():  
-        readdata = interface.read_block_scalar_data(readdataID, dataIndices)
-        coupledata = couplingsample.asfunction(readdata)
-        
-        #sqrl = topo.integral('(lmbda - coupledata)^2 d:x' @ ns, degree=degree*2)
-        sqrl = couplingsample.integral((ns.lmbda - coupledata)**2)
-        
+        lmbda = interface.read_block_scalar_data(lmbdaID, dataIndices)
+        lmbda_function = couplingsample.asfunction(lmbda)
+        sqrl = couplingsample.integral((ns.lmbda - lmbda_function)**2)
         lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
+        
+        gc = interface.read_block_scalar_data(gcID, dataIndices)
+        gc_function = couplingsample.asfunction(gc)
+        sqrl = couplingsample.integral((ns.Gc - gc_function)**2)
+        gcdofs = solver.optimize('gcdofs', sqrl, droptol=1e-12)
 
       ############################
       # Phase field problem      #
@@ -163,7 +163,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       resd  = ipoints.integral('( Gc / l0 ) ( d dbasis_n + l0^2 d_,i dbasis_n,i ) d:x' @ ns)
       resd += ipoints.integral('2 H ( d - 1 ) dbasis_n d:x' @ ns)
 
-      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs}, constrain=consd)
+      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs}, constrain=consd)
 
       ############################
       # Elasticity problem       #
@@ -194,11 +194,11 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       # element-averaged history field
       transforms = ipoints.transforms[0]
       indicator  = function.kronecker(1., axis=0, length=len(transforms), pos=function.TransformsIndexWithTail(transforms, function.TRANS).index)
-      areas, integrals = ipoints.integrate([indicator, indicator * ns.H], arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
+      areas, integrals = ipoints.integrate([indicator, indicator * ns.H], arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs})
       H = indicator.dot(integrals/areas)
 
       # evaluate fields
-      points, dvals, uvals, psivals, lvals = bezier.eval(['x_i', 'd', 'u_i', 'psi', 'lmbda'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
+      points, dvals, uvals, psivals, lvals, gcvals = bezier.eval(['x_i', 'd', 'u_i', 'psi', 'lmbda', 'Gc'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs})
       Hvals = bezier.eval(H, arguments={'solu':solu, 'solH0':solH0})
 
       with export.mplfigure('solution.png') as fig:
@@ -238,6 +238,14 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
         ax.autoscale(enable=True, axis='both', tight=False)
         fig.colorbar(im)
         im.set_clim(1e11,2e11)
+        
+      with export.mplfigure('toughness.png') as fig:
+        ax = fig.add_subplot(111)
+        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, gcvals, shading='gouraud', cmap='jet', rasterized=True)
+        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
+        ax.autoscale(enable=True, axis='both', tight=False)
+        fig.colorbar(im)
+        im.set_clim(0,3e3)  
         
       if not interface.is_coupling_ongoing():
         break

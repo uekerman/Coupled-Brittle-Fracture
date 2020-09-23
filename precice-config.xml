@@ -9,34 +9,40 @@
   <solver-interface dimensions="2">
 
   <data:scalar name="Lmbda"/>
+  <data:scalar name="Gc"/>
 
   <mesh name="Dummy-Mesh">
     <use-data name="Lmbda"/>
+    <use-data name="Gc"/>
   </mesh>
 
   <mesh name="BrittleFracture-Mesh">
-    <use-data name="Lmbda" />
+    <use-data name="Lmbda"/>
+    <use-data name="Gc"/>
   </mesh>
   
   <participant name="Dummy">
     <use-mesh name="Dummy-Mesh" provide="yes"/>
     <write-data name="Lmbda" mesh="Dummy-Mesh"/>
+    <write-data name="Gc" mesh="Dummy-Mesh"/>
   </participant>
 
   <participant name="BrittleFracture">
     <use-mesh name="Dummy-Mesh" from="Dummy"/>
     <use-mesh name="BrittleFracture-Mesh" provide="yes"/>
     <mapping:nearest-neighbor direction="read"  from="Dummy-Mesh" to="BrittleFracture-Mesh" constraint="consistent"/>
-    <read-data name="Lmbda" mesh="BrittleFracture-Mesh" />
+    <read-data name="Lmbda" mesh="BrittleFracture-Mesh"/>
+    <read-data name="Gc" mesh="BrittleFracture-Mesh"/>
   </participant>    
 
   <m2n:sockets from="Dummy" to="BrittleFracture" exchange-directory="."/>
 
   <coupling-scheme:serial-explicit>
     <time-window-size value="1.0"/>
-    <max-time value="2"/>
+    <max-time value="150"/>
     <participants first="Dummy" second="BrittleFracture"/>
     <exchange data="Lmbda" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>
+    <exchange data="Gc" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>
   </coupling-scheme:serial-explicit>
 
   </solver-interface>
