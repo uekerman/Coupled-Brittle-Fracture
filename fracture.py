@@ -42,7 +42,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
      nstep [1000]
        Number of steps.
 
-     du [0.0002mm]
+     du [0.02mm]
        Increment in displacement.
   '''
 
@@ -170,7 +170,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       ############################
 
       resu = topo.integral('( 1 - d )^2 ubasis_ni,j stress_ij d:x' @ ns, degree=2*degree)
-      solu = solver.solve_linear('solu', resu, arguments={'sold':sold, 'lmbdadofs':lmbdadofs}, constrain=istep*consu)
+      solu = solver.solve_linear('solu', resu, arguments={'sold':sold, 'lmbdadofs':lmbdadofs}, constrain=consu)
 
       # Update zero state and history field
       solH0 = ipoints.eval(ns.H, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs})

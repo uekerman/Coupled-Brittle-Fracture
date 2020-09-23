@@ -39,7 +39,7 @@
 
   <coupling-scheme:serial-explicit>
     <time-window-size value="1.0"/>
-    <max-time value="150"/>
+    <max-time value="100"/>
     <participants first="Dummy" second="BrittleFracture"/>
     <exchange data="Lmbda" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>
     <exchange data="Gc" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>

@@ -33,6 +33,8 @@ vertex_ids = interface.set_mesh_vertices(mesh_id, positions)
 
 precice_dt = interface.initialize()
 
+step = 0
+
 while interface.is_coupling_ongoing():
   
   print("Generating data")
@@ -40,13 +42,14 @@ while interface.is_coupling_ongoing():
   lmbda = np.ones((N+1)*(N+1)) * 121153.8e6 # First Lamé parameter
   gc = np.ones((N+1)*(N+1)) * 2.7e3 # Fracture toughness.
   for i in range(int(N*3/4), N+1):
-    gc[(N+1)*int(N/2) + i] = 1e-3
+    gc[(N+1)*int(N/2) + i] *= (1.0 - step / 100)
   
   interface.write_block_scalar_data(lmbda_id, vertex_ids, lmbda)
   interface.write_block_scalar_data(gc_id, vertex_ids, gc)
   
   precice_dt = interface.advance(precice_dt)
   
+  step = step + 1
   
 interface.finalize()
 
