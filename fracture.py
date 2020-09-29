@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 unit = types.unit(m=1, s=1, g=1e-3, N='kg*m/s2', Pa='N/m2')
 
-def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], mu:unit['Pa'], nstep:int, du:unit['m']):
+def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], mu:unit['Pa'], du:unit['m']):
 
   '''
   Mechanical test case
@@ -17,9 +17,6 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
 
      L [1.0mm]
        Domain size.
-
-     c [0.5mm]
-       Initial crack length.
 
      l0 [0.015mm]
        Charateristic length scale.
@@ -39,22 +36,20 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
      mu [80769.2MPa]
        Second Lame parameter.
 
-     nstep [1000]
-       Number of steps.
-
      du [0.02mm]
-       Increment in displacement.
+       Applied displacement.
   '''
 
   assert degree > 0
 
+  # compute mesh caracteristics
   m0 = int(L/h0) if int(L/h0)%2==0 else int(L/h0)+1
   m1 = (2**nr)*m0
   h1 = L/m1
 
   treelog.info('nelems (coarse)= {}'.format(m0))
   treelog.info('nelems (fine)  = {}'.format(m1))
-
+  
   # create the mesh
   topo, geom = mesh.rectilinear([numpy.linspace(-L/2,L/2,m0+1)]*2)
   for ir in range(nr):
@@ -62,17 +57,16 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
     vals = bezier.eval(geom,  separate=True)
     mask = [(abs(vals[i,1])<ry0).any() for i in bezier.index]
     topo = topo.refined_by(numpy.arange(len(topo),dtype=int)[mask])
-
+    
   # create the initial fracture topology
   interfaces = topo.interfaces
   sbezier = interfaces.sample('uniform',1)
   vals = sbezier.eval(geom, separate=True)
-  #mask = numpy.concatenate([(abs(vals[i,1])<0.5*h1 and vals[i,0]<0) for i in sbezier.index])
   mask = numpy.concatenate([(abs(vals[i,1])<0.5*h1 and vals[i,0]<-L/2) for i in sbezier.index])
-
   ctopo = topology.Topology(interfaces.references[mask], transforms=interfaces.transforms[mask], opposites=interfaces.opposites[mask])
-
   treelog.info('initial fracture length check: {:3.2f})'.format(ctopo.integrate(function.J(geom),ischeme='gauss1')))
+  # TODO why is ctopo still needed? how is ctopo different from topo?
+
 
   # prepare the integration and post processing samples
   ipoints = topo.sample('gauss', 2*degree)
@@ -91,6 +85,7 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   ns.l0     = l0
   ns.du     = du
   
+  # volume coupling fields
   ns.Gc    = 'dbasis_n  ?gcdofs_n'
   ns.lmbda = 'dbasis_n  ?lmbdadofs_n'
 
@@ -101,12 +96,13 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   ns.H         = function.max(ns.psi, ns.H0)
   ns.gamma     = '( d^2 + l0^2 d_,i d_,i ) / (2 l0)'
 
-  # incremental solution constraints
+  # boundary condition for displacement field
   sqru  = topo.boundary['top'].integral('( u_i n_i - du )^2 d:x' @ ns, degree=degree*2)
   sqru += topo.boundary['bottom'].integral('( u_i n_i )^2 d:x' @ ns, degree=degree*2)
   sqru += topo.boundary['bottom'].boundary['left'].integral('u_i u_i d:x' @ ns, degree=degree*2)
   consu = solver.optimize('solu', sqru, droptol=1e-12)
 
+  # initial solution for damage field
   sqrd  = ctopo.integral('(d - 1)^2 d:x' @ ns, degree=degree*2)
   consd = solver.optimize('sold', sqrd, droptol=1e-12)
 
@@ -116,11 +112,6 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   sold[numpy.isnan(consd)] = 0.
   solH0 = ipoints.eval(0.)
 
-  # Initialize data containers
-  data_clen  = []
-  data_disp  = []
-  data_force = []
-  
   # preCICE setup
   configFileName = "precice-config.xml"
   participantName = "BrittleFracture"
@@ -139,12 +130,17 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
   lmbdaID = interface.get_data_id("Lmbda", meshID)
   gcID = interface.get_data_id("Gc", meshID)
   
-  precice_dt = interface.initialize()
+  precice_dt = interface.initialize() # pseudo timestep size handled by preCICE
 
-  # Make loading steps
+  nstep = 10000 # very high number of steps, end of simulation is steered by preCICE instead 
+  
+  # time loop
   with treelog.iter.fraction('step', range(nstep)) as counter:
     for istep in counter:
     
+      if not interface.is_coupling_ongoing():
+        break
+      
       if interface.is_read_data_available():  
         lmbda = interface.read_block_scalar_data(lmbdaID, dataIndices)
         lmbda_function = couplingsample.asfunction(lmbda)
@@ -182,15 +178,6 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       # Output                   #
       ############################
 
-      clen = ipoints.integrate('gamma d:x' @ ns, arguments={'sold':sold})
-
-      # append data containers
-      blen, bdisp, bforc = topo.boundary['top'].integrate(['d:x', 'u_i n_i d:x', '( 1 - d )^2 stress_ij n_i n_j d:x'] @ ns(solu=solu, sold=sold, lmbdadofs=lmbdadofs), degree=2*degree)
-      bdisp /= blen
-      data_disp.append(bdisp/unit('1.0mm'))
-      data_force.append(bforc*unit('1.0mm'))
-      data_clen.append(clen/unit('1.0mm'))
-
       # element-averaged history field
       transforms = ipoints.transforms[0]
       indicator  = function.kronecker(1., axis=0, length=len(transforms), pos=function.TransformsIndexWithTail(transforms, function.TRANS).index)
@@ -198,16 +185,8 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
       H = indicator.dot(integrals/areas)
 
       # evaluate fields
-      points, dvals, uvals, psivals, lvals, gcvals = bezier.eval(['x_i', 'd', 'u_i', 'psi', 'lmbda', 'Gc'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs})
+      points, dvals, uvals, lvals, gcvals = bezier.eval(['x_i', 'd', 'u_i', 'lmbda', 'Gc'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs})
       Hvals = bezier.eval(H, arguments={'solu':solu, 'solH0':solH0})
-
-      with export.mplfigure('solution.png') as fig:
-        ax = fig.add_subplot(111)
-        ax.plot(data_disp, data_force, '.-')
-        ax.set_title('c = {:.2E}'.format(data_clen[-1]))
-        ax.set_xlabel('Displacement')
-        ax.set_ylabel('Force')
-        ax.grid()
 
       with export.mplfigure('displacement.png') as fig:
         ax = fig.add_subplot(111)
@@ -246,9 +225,6 @@ def main(L:unit['m'], c:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:in
         ax.autoscale(enable=True, axis='both', tight=False)
         fig.colorbar(im)
         im.set_clim(0,3e3)  
-        
-      if not interface.is_coupling_ongoing():
-        break
         
   interface.finalize()
 
