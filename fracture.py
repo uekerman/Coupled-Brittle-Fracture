@@ -8,7 +8,7 @@ from mpi4py import MPI
 
 unit = types.unit(m=1, s=1, g=1e-3, N='kg*m/s2', Pa='N/m2')
 
-def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], mu:unit['Pa'], du:unit['m']):
+def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], du:unit['m']):
 
   '''
   Mechanical test case
@@ -32,9 +32,6 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
 
      ry0 [0.09mm]
        Half-size of the y-refinement zone.
-
-     mu [80769.2MPa]
-       Second Lame parameter.
 
      du [0.02mm]
        Applied displacement.
@@ -81,13 +78,13 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
   ns.u_i    = 'ubasis_ni ?solu_n'
   ns.d      = 'dbasis_n  ?sold_n'
   ns.H0     = 'Hbasis_n ?solH0_n'
-  ns.mu     = mu
   ns.l0     = l0
   ns.du     = du
   
   # volume coupling fields
   ns.Gc    = 'dbasis_n  ?gcdofs_n'
   ns.lmbda = 'dbasis_n  ?lmbdadofs_n'
+  ns.mu    = 'dbasis_n  ?mudofs_n'
 
   # formulation
   ns.strain_ij = '( u_i,j + u_j,i ) / 2'
@@ -128,7 +125,8 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
 
   # coupling data
   lmbdaID = interface.get_data_id("Lmbda", meshID)
-  gcID = interface.get_data_id("Gc", meshID)
+  muID    = interface.get_data_id("Mu", meshID)
+  gcID    = interface.get_data_id("Gc", meshID)
   
   precice_dt = interface.initialize() # pseudo timestep size handled by preCICE
 
@@ -147,10 +145,15 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
         sqrl = couplingsample.integral((ns.lmbda - lmbda_function)**2)
         lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
         
+        mu = interface.read_block_scalar_data(muID, dataIndices)
+        mu_function = couplingsample.asfunction(mu)
+        sqrm = couplingsample.integral((ns.mu - mu_function)**2)
+        mudofs = solver.optimize('mudofs', sqrm, droptol=1e-12)
+        
         gc = interface.read_block_scalar_data(gcID, dataIndices)
         gc_function = couplingsample.asfunction(gc)
-        sqrl = couplingsample.integral((ns.Gc - gc_function)**2)
-        gcdofs = solver.optimize('gcdofs', sqrl, droptol=1e-12)
+        sqrg = couplingsample.integral((ns.Gc - gc_function)**2)
+        gcdofs = solver.optimize('gcdofs', sqrg, droptol=1e-12)
 
       ############################
       # Phase field problem      #
@@ -159,17 +162,17 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
       resd  = ipoints.integral('( Gc / l0 ) ( d dbasis_n + l0^2 d_,i dbasis_n,i ) d:x' @ ns)
       resd += ipoints.integral('2 H ( d - 1 ) dbasis_n d:x' @ ns)
 
-      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs}, constrain=consd)
+      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs, 'gcdofs':gcdofs}, constrain=consd)
 
       ############################
       # Elasticity problem       #
       ############################
 
       resu = topo.integral('( 1 - d )^2 ubasis_ni,j stress_ij d:x' @ ns, degree=2*degree)
-      solu = solver.solve_linear('solu', resu, arguments={'sold':sold, 'lmbdadofs':lmbdadofs}, constrain=consu)
+      solu = solver.solve_linear('solu', resu, arguments={'sold':sold, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs}, constrain=consu)
 
       # Update zero state and history field
-      solH0 = ipoints.eval(ns.H, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs})
+      solH0 = ipoints.eval(ns.H, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs})
       
       # do the coupling
       precice_dt = interface.advance(precice_dt)
@@ -181,11 +184,11 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
       # element-averaged history field
       transforms = ipoints.transforms[0]
       indicator  = function.kronecker(1., axis=0, length=len(transforms), pos=function.TransformsIndexWithTail(transforms, function.TRANS).index)
-      areas, integrals = ipoints.integrate([indicator, indicator * ns.H], arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs})
+      areas, integrals = ipoints.integrate([indicator, indicator * ns.H], arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs, 'gcdofs':gcdofs})
       H = indicator.dot(integrals/areas)
 
       # evaluate fields
-      points, dvals, uvals, lvals, gcvals = bezier.eval(['x_i', 'd', 'u_i', 'lmbda', 'Gc'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'gcdofs':gcdofs})
+      points, dvals, uvals, lvals, mvals, gcvals = bezier.eval(['x_i', 'd', 'u_i', 'lmbda', 'mu', 'Gc'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs, 'gcdofs':gcdofs})
       Hvals = bezier.eval(H, arguments={'solu':solu, 'solH0':solH0})
 
       with export.mplfigure('displacement.png') as fig:
@@ -216,7 +219,13 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
         ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
         ax.autoscale(enable=True, axis='both', tight=False)
         fig.colorbar(im)
-        im.set_clim(1e11,2e11)
+        
+      with export.mplfigure('mu.png') as fig:
+        ax = fig.add_subplot(111)
+        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, mvals, shading='gouraud', cmap='jet', rasterized=True)
+        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
+        ax.autoscale(enable=True, axis='both', tight=False)
+        fig.colorbar(im)
         
       with export.mplfigure('toughness.png') as fig:
         ax = fig.add_subplot(111)
