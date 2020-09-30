@@ -55,16 +55,6 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
     mask = [(abs(vals[i,1])<ry0).any() for i in bezier.index]
     topo = topo.refined_by(numpy.arange(len(topo),dtype=int)[mask])
     
-  # create the initial fracture topology
-  interfaces = topo.interfaces
-  sbezier = interfaces.sample('uniform',1)
-  vals = sbezier.eval(geom, separate=True)
-  mask = numpy.concatenate([(abs(vals[i,1])<0.5*h1 and vals[i,0]<-L/2) for i in sbezier.index])
-  ctopo = topology.Topology(interfaces.references[mask], transforms=interfaces.transforms[mask], opposites=interfaces.opposites[mask])
-  treelog.info('initial fracture length check: {:3.2f})'.format(ctopo.integrate(function.J(geom),ischeme='gauss1')))
-  # TODO why is ctopo still needed? how is ctopo different from topo?
-
-
   # prepare the integration and post processing samples
   ipoints = topo.sample('gauss', 2*degree)
   bezier  = topo.sample('bezier', 4)
@@ -99,14 +89,9 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
   sqru += topo.boundary['bottom'].boundary['left'].integral('u_i u_i d:x' @ ns, degree=degree*2)
   consu = solver.optimize('solu', sqru, droptol=1e-12)
 
-  # initial solution for damage field
-  sqrd  = ctopo.integral('(d - 1)^2 d:x' @ ns, degree=degree*2)
-  consd = solver.optimize('sold', sqrd, droptol=1e-12)
-
   # initialize the solution vectors
   solu = numpy.zeros(ns.ubasis.shape[0])
-  sold = consd.copy()
-  sold[numpy.isnan(consd)] = 0.
+  sold = numpy.zeros(ns.dbasis.shape[0])
   solH0 = ipoints.eval(0.)
 
   # preCICE setup
@@ -162,7 +147,7 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
       resd  = ipoints.integral('( Gc / l0 ) ( d dbasis_n + l0^2 d_,i dbasis_n,i ) d:x' @ ns)
       resd += ipoints.integral('2 H ( d - 1 ) dbasis_n d:x' @ ns)
 
-      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs, 'gcdofs':gcdofs}, constrain=consd)
+      sold = solver.solve_linear('sold', resd, arguments={'solu':solu, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs, 'gcdofs':gcdofs})
 
       ############################
       # Elasticity problem       #
