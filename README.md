@@ -21,11 +21,11 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 
 ## Folder structure
 
-├── `Allclean`: a bash script to clean the case 
-├── `dummy.py`: the dummy code, which provides the material parameters
-├── `fracture.py`: the fracture mechanics, implemented with Nutils
-├── `precice-config.xml`: the preCICE configuration file, describing the coupled setup
-└── `README.md`
+- `Allclean`: a bash script to clean the case 
+- `dummy.py`: the dummy code, which provides the material parameters
+- `fracture.py`: the fracture mechanics, implemented with Nutils
+- `precice-config.xml`: the preCICE configuration file, describing the coupled setup
+- `README.md`
 
 ## How to run
 
@@ -36,7 +36,7 @@ Open two terminals and start one program in each directly from the root director
 ## Visualization
 
 Nutils collects and outputs data in html. Simply open the link that Nutils outputs in your browser.
-Something like: `file://///home/uekerman/public_html/fracture.py/log.html`
+Something like: `file://///home/uekerman/public_html/fracture.py/log.html`.
 Click on links there and take notice of the menu on the top right.
 
 ## On the characteristic length scale l0
