@@ -33,7 +33,7 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
      ry0 [0.09mm]
        Half-size of the y-refinement zone.
 
-     du [0.02mm]
+     du [0.01mm]
        Applied displacement.
   '''
 

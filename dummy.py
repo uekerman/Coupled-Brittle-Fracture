@@ -29,7 +29,6 @@ vertex_ids = interface.set_mesh_vertices(mesh_id, positions)
 precice_dt = interface.initialize() # pseudo timestep size handled by preCICE
 
 step  = 0
-nstep = 100
 
 while interface.is_coupling_ongoing():
   
@@ -41,7 +40,9 @@ while interface.is_coupling_ongoing():
   
   # modify fracture toughness at some arbitrary location (here vertical line, verically centered, right quarter of domain) 
   for i in range(int(N*3/4), N+1):
-    gc[(N+1)*int(N/2) + i] *= (1.0 - step / nstep) # fracture toughness slowly decreases
+    gc[(N+1)*int(N/2) + i] *= np.exp(-step) # fracture toughness decreases exponentially
+    gc[(N+1)*(int(N/2)+1)+ + i] *= np.exp(-step)
+  print(np.exp(-step))
 
   # write data to preCICE  
   interface.write_block_scalar_data(lmbda_id, vertex_ids, lmbda)
