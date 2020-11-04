@@ -8,47 +8,35 @@
 
   <solver-interface dimensions="2">
 
-  <data:scalar name="Lmbda"/>
-  <data:scalar name="Mu"/>
   <data:scalar name="Gc"/>
 
-  <mesh name="Dummy-Mesh">
-    <use-data name="Lmbda"/>
-    <use-data name="Mu"/>
+  <mesh name="Corrosion-Mesh">
     <use-data name="Gc"/>
   </mesh>
 
   <mesh name="BrittleFracture-Mesh">
-    <use-data name="Lmbda"/>
-    <use-data name="Mu"/>
     <use-data name="Gc"/>
   </mesh>
   
-  <participant name="Dummy">
-    <use-mesh name="Dummy-Mesh" provide="yes"/>
-    <write-data name="Lmbda" mesh="Dummy-Mesh"/>
-    <write-data name="Mu" mesh="Dummy-Mesh"/>
-    <write-data name="Gc" mesh="Dummy-Mesh"/>
+  <participant name="Corrosion">
+    <use-mesh name="Corrosion-Mesh" provide="yes"/>
+    <write-data name="Gc" mesh="Corrosion-Mesh"/>
   </participant>
 
   <participant name="BrittleFracture">
-    <use-mesh name="Dummy-Mesh" from="Dummy"/>
+    <use-mesh name="Corrosion-Mesh" from="Corrosion"/>
     <use-mesh name="BrittleFracture-Mesh" provide="yes"/>
-    <mapping:nearest-neighbor direction="read"  from="Dummy-Mesh" to="BrittleFracture-Mesh" constraint="consistent"/>
-    <read-data name="Lmbda" mesh="BrittleFracture-Mesh"/>
-    <read-data name="Mu" mesh="BrittleFracture-Mesh"/>
+    <mapping:nearest-neighbor direction="read"  from="Corrosion-Mesh" to="BrittleFracture-Mesh" constraint="consistent"/>
     <read-data name="Gc" mesh="BrittleFracture-Mesh"/>
   </participant>    
 
-  <m2n:sockets from="Dummy" to="BrittleFracture" exchange-directory="."/>
+  <m2n:sockets from="Corrosion" to="BrittleFracture" />
 
   <coupling-scheme:serial-explicit>
     <time-window-size value="1.0"/>
-    <max-time value="100"/>
-    <participants first="Dummy" second="BrittleFracture"/>
-    <exchange data="Lmbda" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>
-    <exchange data="Mu" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>
-    <exchange data="Gc" mesh="Dummy-Mesh" from="Dummy" to="BrittleFracture"/>
+    <max-time value="1"/>
+    <participants first="Corrosion" second="BrittleFracture"/>
+    <exchange data="Gc" mesh="Corrosion-Mesh" from="Corrosion" to="BrittleFracture"/>
   </coupling-scheme:serial-explicit>
 
   </solver-interface>

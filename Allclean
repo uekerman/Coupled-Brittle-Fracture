@@ -9,7 +9,9 @@ rm -fv \
     precice-*.log \
     precice-postProcessingInfo.log \
     precice-*-events.json \
-    *.vtk
+    *.vtk \
+    *.pvd \
+    *.vtu
 
 rm -rfv precice-run
 

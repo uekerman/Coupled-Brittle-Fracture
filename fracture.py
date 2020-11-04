@@ -8,30 +8,24 @@ from mpi4py import MPI
 
 unit = types.unit(m=1, s=1, g=1e-3, N='kg*m/s2', Pa='N/m2')
 
-def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['m'], du:unit['m']):
+def main(X:unit['m'], Y:unit['m'], l0:unit['m'], degree:int, du:unit['m']):
 
   '''
   Mechanical test case
 
   .. arguments::
 
-     L [1.0mm]
-       Domain size.
+     X [0.5mm]
+       Domain size in x direction.
+
+     Y [0.04mm]
+       Domain size in y direction.
 
      l0 [0.015mm]
-       Charateristic length scale.
-
-     h0 [0.25mm]
-       Coarse-scale mesh size.     
-
-     nr [4]
-       Number of local refinements.
+       Charateristic length scale.    
 
      degree [1]
        Polynomial degree of the approximation.
-
-     ry0 [0.09mm]
-       Half-size of the y-refinement zone.
 
      du [0.01mm]
        Applied displacement.
@@ -39,25 +33,12 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
 
   assert degree > 0
 
-  # compute mesh caracteristics
-  m0 = int(L/h0) if int(L/h0)%2==0 else int(L/h0)+1
-  m1 = (2**nr)*m0
-  h1 = L/m1
-
-  treelog.info('nelems (coarse)= {}'.format(m0))
-  treelog.info('nelems (fine)  = {}'.format(m1))
-  
   # create the mesh
-  topo, geom = mesh.rectilinear([numpy.linspace(-L/2,L/2,m0+1)]*2)
-  for ir in range(nr):
-    bezier = topo.sample('vertex',0)
-    vals = bezier.eval(geom,  separate=True)
-    mask = [(abs(vals[i,1])<ry0).any() for i in bezier.index]
-    topo = topo.refined_by(numpy.arange(len(topo),dtype=int)[mask])
+  topo, geom = mesh.rectilinear([numpy.linspace(0.001,0.001+X,31), numpy.linspace(0.001,0.001+Y,11)])
     
   # prepare the integration and post processing samples
   ipoints = topo.sample('gauss', 2*degree)
-  bezier  = topo.sample('bezier', 4)
+  bezier  = topo.sample('bezier', 2*degree)
 
   # initialize the namespace
   ns        = function.Namespace()
@@ -107,11 +88,18 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
   couplingsample = topo.sample('gauss', degree=degree*2)
   vertices = couplingsample.eval(ns.x)
   dataIndices = interface.set_mesh_vertices(meshID, vertices)
+  
+  lmbda = 121153.8e6 # First Lamé parameter in Pa
+  mu    = 80769.2e6 # Second Lamé parameter in Pa
+  
+  sqrl = couplingsample.integral((ns.lmbda - lmbda)**2)
+  lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
+  
+  sqrm = couplingsample.integral((ns.mu - mu)**2)
+  mudofs = solver.optimize('mudofs', sqrm, droptol=1e-12)
 
   # coupling data
-  lmbdaID = interface.get_data_id("Lmbda", meshID)
-  muID    = interface.get_data_id("Mu", meshID)
-  gcID    = interface.get_data_id("Gc", meshID)
+  gcID = interface.get_data_id("Gc", meshID)
   
   precice_dt = interface.initialize() # pseudo timestep size handled by preCICE
 
@@ -125,16 +113,6 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
         break
       
       if interface.is_read_data_available():  
-        lmbda = interface.read_block_scalar_data(lmbdaID, dataIndices)
-        lmbda_function = couplingsample.asfunction(lmbda)
-        sqrl = couplingsample.integral((ns.lmbda - lmbda_function)**2)
-        lmbdadofs = solver.optimize('lmbdadofs', sqrl, droptol=1e-12)
-        
-        mu = interface.read_block_scalar_data(muID, dataIndices)
-        mu_function = couplingsample.asfunction(mu)
-        sqrm = couplingsample.integral((ns.mu - mu_function)**2)
-        mudofs = solver.optimize('mudofs', sqrm, droptol=1e-12)
-        
         gc = interface.read_block_scalar_data(gcID, dataIndices)
         gc_function = couplingsample.asfunction(gc)
         sqrg = couplingsample.integral((ns.Gc - gc_function)**2)
@@ -165,7 +143,7 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
       ############################
       # Output                   #
       ############################
-
+      
       # element-averaged history field
       transforms = ipoints.transforms[0]
       indicator  = function.kronecker(1., axis=0, length=len(transforms), pos=function.TransformsIndexWithTail(transforms, function.TRANS).index)
@@ -175,51 +153,10 @@ def main(L:unit['m'], l0:unit['m'], h0:unit['m'], nr:int, degree:int, ry0:unit['
       # evaluate fields
       points, dvals, uvals, lvals, mvals, gcvals = bezier.eval(['x_i', 'd', 'u_i', 'lmbda', 'mu', 'Gc'] @ ns, arguments={'solu':solu, 'sold':sold, 'solH0':solH0, 'lmbdadofs':lmbdadofs, 'mudofs':mudofs, 'gcdofs':gcdofs})
       Hvals = bezier.eval(H, arguments={'solu':solu, 'solH0':solH0})
+      
+      with treelog.add(treelog.DataLog()):
+        export.vtk('Solid_' + str(istep), bezier.tri, points, Gc=gcvals, D=dvals, U=uvals, H=Hvals)
 
-      with export.mplfigure('displacement.png') as fig:
-        ax = fig.add_subplot(111)
-        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, numpy.linalg.norm(uvals,axis=1), shading='gouraud', cmap='jet', rasterized=True)
-        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
-        ax.autoscale(enable=True, axis='both', tight=False)
-        fig.colorbar(im)
-
-      with export.mplfigure('damage.png') as fig:
-        ax = fig.add_subplot(111)
-        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, dvals, shading='gouraud', cmap='jet', rasterized=True)
-        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
-        ax.autoscale(enable=True, axis='both', tight=False)
-        fig.colorbar(im)
-        im.set_clim(0,1)
-
-      with export.mplfigure('history.png') as fig:
-        ax = fig.add_subplot(111)
-        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, Hvals, shading='gouraud', cmap='jet', rasterized=True)
-        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
-        ax.autoscale(enable=True, axis='both', tight=False)
-        fig.colorbar(im)
-        
-      with export.mplfigure('lambda.png') as fig:
-        ax = fig.add_subplot(111)
-        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, lvals, shading='gouraud', cmap='jet', rasterized=True)
-        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
-        ax.autoscale(enable=True, axis='both', tight=False)
-        fig.colorbar(im)
-        
-      with export.mplfigure('mu.png') as fig:
-        ax = fig.add_subplot(111)
-        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, mvals, shading='gouraud', cmap='jet', rasterized=True)
-        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
-        ax.autoscale(enable=True, axis='both', tight=False)
-        fig.colorbar(im)
-        
-      with export.mplfigure('toughness.png') as fig:
-        ax = fig.add_subplot(111)
-        im = ax.tripcolor(points[:,0], points[:,1], bezier.tri, gcvals, shading='gouraud', cmap='jet', rasterized=True)
-        ax.add_collection(matplotlib.collections.LineCollection(points[bezier.hull], colors='k', linewidth=0.5, alpha=0.2))
-        ax.autoscale(enable=True, axis='both', tight=False)
-        fig.colorbar(im)
-        im.set_clim(0,3e3)  
-        
   interface.finalize()
 
 cli.run(main)
