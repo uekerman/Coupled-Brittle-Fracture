@@ -1,6 +1,6 @@
 # Coupled Phase-Field Brittle Fracture Simulation
 
-A phase-field brittle fracture mechanics code written in [Nutils](http://www.nutils.org/en/latest/) is coupled to a dummy Python script providing material parameters (fracture toughness, first and second Lamé parameters). The coupling is realized with [preCICE](https://www.precice.org/). The purpose of this code is to showcase how preCICE could be used to volume-couple between an electro-chemistry model (here the dummy script) and a fracture mechanics model.
+A phase-field brittle fracture mechanics code written in [Nutils](http://www.nutils.org/en/latest/) is coupled to a Poisson equation in FEniCS. The FEniCS code is a place-holder for a proper corrosion model and currently provides dummy material parameters (fracture toughness). The coupling is realized with [preCICE](https://www.precice.org/). The purpose of this code is to showcase how preCICE could be used to volume-couple between an electro-chemistry model (here the FEniCS code) and a fracture mechanics model.
 
 The original fracture mechanics code was developed by [Clemens Verhoosel](https://www.tue.nl/en/research/researchers/clemens-verhoosel/). The model is documented in this publication:
  
@@ -18,11 +18,14 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 * [treelog](https://github.com/evalf/treelog) (should already be fetched as dependency of nutils)
 * [preCICE v2](https://github.com/precice/precice/releases/tag/v2.1.0)
 * [pyprecice v2](https://pypi.org/project/pyprecice/) 
+* [FEniCS v2019.1](https://fenicsproject.org/download/)
+* FEniCS-preCICE adapter: [branch `delete-connectivity` from this fork](https://github.com/uekerman/fenics-adapter/tree/delete-connectivity)
 
 ## Folder structure
 
 - `Allclean`: a bash script to clean the case 
-- `dummy.py`: the dummy code, which provides the material parameters
+- `corrosion.py`: the dummy corrosion model, implemented with FEniCS
+- `dummy.py`: an alternative dummy code, which can also provide material parameters
 - `fracture.py`: the fracture mechanics, implemented with Nutils
 - `precice-config.xml`: the preCICE configuration file, describing the coupled setup
 - `README.md`
@@ -30,14 +33,12 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 ## How to run
 
 Open two terminals and start one program in each directly from the root directory:
-* `python3 fracture.py`
+* `python3 corrosion.py`
 * `python3 dummy.py`
 
 ## Visualization
 
-Nutils collects and outputs data in html. Simply open the link that Nutils outputs in your browser.
-Something like: `file://///home/uekerman/public_html/fracture.py/log.html`.
-Click on links there and take notice of the menu on the top right.
+Both codes write vtk data, which can be visualized for example with [Paraview](https://www.paraview.org/).
 
 ## On the characteristic length scale l0
 
