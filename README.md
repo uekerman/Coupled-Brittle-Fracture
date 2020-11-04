@@ -21,11 +21,11 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 
 ## Folder structure
 
-├── `Allclean`: a bash script to clean the case 
-├── `dummy.py`: the dummy code, which provides the material parameters
-├── `fracture.py`: the fracture mechanics, implemented with Nutils
-├── `precice-config.xml`: the preCICE configuration file, describing the coupled setup
-└── `README.md`
+- `Allclean`: a bash script to clean the case 
+- `dummy.py`: the dummy code, which provides the material parameters
+- `fracture.py`: the fracture mechanics, implemented with Nutils
+- `precice-config.xml`: the preCICE configuration file, describing the coupled setup
+- `README.md`
 
 ## How to run
 
@@ -36,12 +36,12 @@ Open two terminals and start one program in each directly from the root director
 ## Visualization
 
 Nutils collects and outputs data in html. Simply open the link that Nutils outputs in your browser.
-Something like: `file://///home/uekerman/public_html/fracture.py/log.html`
+Something like: `file://///home/uekerman/public_html/fracture.py/log.html`.
 Click on links there and take notice of the menu on the top right.
 
 ## On the characteristic length scale l0
 
-l0 acts as a numerical regularization parameter for the phase field model. It controls the width of the smooth approximation of the crack. In the limit case of l0 going to zero, the phase-field approximation converges to the discrete fracture surface. The parameter could, however, also be regarded as a model parameter: the critical stress for which crack nucleation occurs depends on it. For smaller l0, the critical stress increases. For the limit case, fracture nucleation is impossible. For too large values of l0, on the other hand, the complete damage field is already above the critical damage value. Whatever happens then could be regarded as unphysical model artifacts. In particular, fractures cannot be localized properly. Given the total load, the Lamé parameters, and the fracture toughness, l0 needs to be tuned such that the initial virgin damage field is below the critical damage value (approximately 0.25, better below 0.1). Additionally, l0 still needs to be larger than the local mesh size.
+l0 acts as a numerical regularization parameter for the phase field model. It controls the width of the smooth approximation of the crack. In the limit case of l0 going to zero, the phase-field approximation converges to the discrete fracture surface. The parameter could, however, also be regarded as a model parameter: the critical stress for which crack nucleation occurs depends on it. For smaller l0, the critical stress increases. For the limit case, fracture nucleation is impossible in the absence of stress singularities. For too large values of l0, on the other hand, the complete damage field is already above the critical damage value. Whatever happens then could be regarded as unphysical model artifacts. In particular, fractures cannot be localized properly. Given the total load, the Lamé parameters, and the fracture toughness, l0 needs to be tuned such that the initial virgin damage field is below the critical damage value (approximately 0.25, better below 0.1). Additionally, l0 still needs to be larger than the local mesh size.
 
 Please see section 2 (in particular section 2.3.1) of:
 Borden, M.J., Verhoosel, C.V., Scott, M.A., Hughes, T.J. and Landis, C.M., 2012. A phase-field description of dynamic brittle fracture. _Computer Methods in Applied Mechanics and Engineering_, **217**, pp.77-95. [PDF](https://apps.dtic.mil/sti/pdfs/ADA555337.pdf)
