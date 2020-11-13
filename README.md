@@ -24,8 +24,9 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 ## Folder structure
 
 - `Allclean`: a bash script to clean the case 
-- `corrosion.py`: the dummy corrosion model, implemented with FEniCS
-- `corrosion.cpp`: a similar dummy corrosion model, implemented with DOLFIN
+- `corrosion.py`: the dummy corrosion model, implemented with FEniCS, using the FEniCS-preCICE adapter for coupling
+- `precice-adapter-config.json`: the FEniCS-preCICE adapter configuration file
+- `corrosion.cpp`: a similar dummy corrosion model, implemented with DOLFIN, directly using preCICE for coupling
 - `Poisson.ufl`: the corresponding DOLFIN unified form language file
 - `CMakeLists`: cmake specification to build the DOLFIN code  
 - `dummy.py`: an alternative dummy code, which can also provide material parameters
