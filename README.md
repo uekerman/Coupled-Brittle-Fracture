@@ -25,15 +25,30 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 
 - `Allclean`: a bash script to clean the case 
 - `corrosion.py`: the dummy corrosion model, implemented with FEniCS
+- `corrosion.cpp`: a similar dummy corrosion model, implemented with DOLFIN
+- `Poisson.ufl`: the corresponding DOLFIN unified form language file
+- `CMakeLists`: cmake specification to build the DOLFIN code  
 - `dummy.py`: an alternative dummy code, which can also provide material parameters
 - `fracture.py`: the fracture mechanics, implemented with Nutils
 - `precice-config.xml`: the preCICE configuration file, describing the coupled setup
 - `README.md`
 
+## Building
+
+The DOLFIN code is the only one that needs building
+
+```bash
+ffc -l dolfin Poisson.ufl
+cmake .
+make
+```
+
+Be sure to use the same `ffc` version as used for the linked `libdolfin`.
+
 ## How to run
 
 Open two terminals and start one program in each directly from the root directory:
-* `python3 corrosion.py`
+* `python3 corrosion.py` or `./demo_corrosion`
 * `python3 dummy.py`
 
 ## Visualization

@@ -1,0 +1,13 @@
+cell = triangle;
+H = FiniteElement("CG", cell, 1)
+phi = TrialFunction(H)
+v = TestFunction(H)
+
+kappa = Coefficient(H)
+f = Coefficient(H)
+g = Coefficient(H)
+
+a = inner(grad(phi), grad(v))*dx
+L = f*v*dx + g*v*ds
+
+# ffc -l dolfin Poisson.ufl
