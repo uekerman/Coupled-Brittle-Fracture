@@ -1,6 +1,6 @@
 # Coupled Phase-Field Brittle Fracture Simulation
 
-A phase-field brittle fracture mechanics code written in [Nutils](http://www.nutils.org/en/latest/) is coupled to a Poisson equation in FEniCS. The FEniCS code is a place-holder for a proper corrosion model and currently provides dummy material parameters (fracture toughness). The coupling is realized with [preCICE](https://www.precice.org/). The purpose of this code is to showcase how preCICE could be used to volume-couple between an electro-chemistry model (here the FEniCS code) and a fracture mechanics model.
+A phase-field brittle fracture mechanics code written in [Nutils](http://www.nutils.org/en/latest/) is coupled to a Poisson equation in FEniCS or DOLFIN. The FEniCS code is a place-holder for a proper corrosion model. The coupling is realized with [preCICE](https://www.precice.org/). The purpose of this code is to showcase how preCICE could be used to volume-couple between an electro-chemistry model (here the FEniCS code) and a fracture mechanics model. Currently, meaningless data is exchanged.
 
 The original fracture mechanics code was developed by [Clemens Verhoosel](https://www.tue.nl/en/research/researchers/clemens-verhoosel/). The model is documented in this publication:
  
@@ -15,15 +15,29 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 * numpy (e.g. 1.18, but any new version should work)
 * matplotlib (e.g. 3.0, but any new version should work)
 * [Nutils v6](https://pypi.org/project/nutils/) 
-* [treelog](https://github.com/evalf/treelog) (should already be fetched as dependency of nutils)
 * [preCICE v2](https://github.com/precice/precice/releases/tag/v2.1.0)
 * [pyprecice v2](https://pypi.org/project/pyprecice/) 
 * [FEniCS v2019.1](https://fenicsproject.org/download/)
-* FEniCS-preCICE adapter: [branch `delete-connectivity` from this fork](https://github.com/uekerman/fenics-adapter/tree/delete-connectivity)
+* [FEniCS-preCICE adapter](https://pypi.org/project/fenicsprecice/) only needed for the FEniCS Poisson equation
+
+## Docker
+
+Instead of installing all dependencies on your system you can run the simulation in a docker container.
+```bash
+$ docker build -t brittle-fracture:1.0 -f brittle-fracture.dockerfile
+$ docker run -it --name bf brittle-fracture:1.0
+```
+Building the docker image will take some time.
+
+Then, just clone this repository
+```
+git clone https://github.com/uekerman/Coupled-Brittle-Fracture.git
+```
+and continue below.
 
 ## Folder structure
 
-- `Allclean`: a bash script to clean the case 
+- `Allclean`: a bash script to clean the case (incl. build artifacts)
 - `corrosion.py`: the dummy corrosion model, implemented with FEniCS, using the FEniCS-preCICE adapter for coupling
 - `precice-adapter-config.json`: the FEniCS-preCICE adapter configuration file
 - `corrosion.cpp`: a similar dummy corrosion model, implemented with DOLFIN, directly using preCICE for coupling
@@ -49,8 +63,13 @@ Be sure to use the same `ffc` version as used for the linked `libdolfin`.
 ## How to run
 
 Open two terminals and start one program in each directly from the root directory:
-* `python3 corrosion.py` or `./demo_corrosion`
-* `python3 dummy.py`
+* Either `python3 corrosion.py` (the FEniCS variant) or `./demo_corrosion` (the DOLFIN variant)
+* `python3 fracture.py`
+
+If you only have one terminal (e.g. in an interactive docker container):
+```bash
+./demo_corrosion & python3 fracture.py
+```
 
 ## Visualization
 
