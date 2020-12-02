@@ -24,12 +24,12 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 
 Instead of installing all dependencies on your system you can run the simulation in a docker container.
 ```bash
-$ docker build -t brittle-fracture:1.0 -f brittle-fracture.dockerfile
+$ docker build -t brittle-fracture:1.0 -f brittle-fracture.dockerfile .
 $ docker run -it --name bf brittle-fracture:1.0
 ```
 Building the docker image will take some time.
 
-Then, just clone this repository
+Then, just clone this repository again within the container.
 ```
 git clone https://github.com/uekerman/Coupled-Brittle-Fracture.git
 ```
