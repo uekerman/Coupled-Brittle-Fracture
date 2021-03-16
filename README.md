@@ -18,7 +18,7 @@ Contact Benjamin for questions about this code. Furthermore, the following suppo
 * [preCICE v2](https://github.com/precice/precice/releases/tag/v2.1.0)
 * [pyprecice v2](https://pypi.org/project/pyprecice/) 
 * [FEniCS v2019.1](https://fenicsproject.org/download/)
-* [FEniCS-preCICE adapter](https://pypi.org/project/fenicsprecice/) only needed for the FEniCS Poisson equation
+* [FEniCS-preCICE adapter v1](https://pypi.org/project/fenicsprecice/) only needed for the FEniCS Poisson equation
 
 ## Docker
 

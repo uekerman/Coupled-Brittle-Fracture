@@ -21,7 +21,7 @@ coupling_domain = AutoSubDomain(coupling)
 # We are currently trying to get rid of this technical restriction.
 precice = Adapter(adapter_config_filename="precice-adapter-config.json")
 
-precice_dt = precice.initialize(coupling_domain, mesh, V, dim) # here we define where the coupling should happen
+precice_dt = precice.initialize(coupling_domain, write_object=V) # here we define where the coupling should happen
 
     
 # Define boundary condition on left and right boundary
